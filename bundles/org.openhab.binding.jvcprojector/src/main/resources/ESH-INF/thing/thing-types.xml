@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="jvcprojector" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+	<!-- JvcProjector Channel Types -->
+    <thing-type id="projector">
+	    <label>JVC Projector</label>
+	    <description>A thing that represents a JVC Projector</description>
+	    
+	    <channel-groups>
+	       <channel-group id="status" typeId="status"/>
+	       <channel-group id="remote" typeId="remote"/>
+	     </channel-groups>
+	    
+	    <config-description>
+            <parameter name="ipAddress" type="text" required="true">
+                <label>IP Address</label>
+                <description>IP Address of projector</description>
+             </parameter>
+            <parameter name="port" type="integer" required="false">
+                <label>Port</label>
+                <description>The default port is 20554. Override as necessary</description>
+                <default>20554</default>
+             </parameter>
+        </config-description>
+    </thing-type>
+
+    <channel-group-type id="status">
+        <label>Status</label>
+        <description>These channels accept commands and also trigger when the device changes state</description>
+        <channels>
+            <channel id="power-state" typeId="channel-type-switch">
+                <label>Power On/Off</label>
+                <description>This channel provides current state and also triggers when the state changes on refresh</description>
+            </channel>
+            <channel id="input-state" typeId="channel-type-input">
+                <label>Current input (HDMI1/HDMI2)</label>
+                <description>This is only populated when the Power is on.</description>
+            </channel>
+        </channels>
+    </channel-group-type>    
+            
+    <channel-group-type id="remote">
+        <label>Operations</label>
+        <description>These channels accept commands and also trigger when the device changes state. They corresponding to pressing the same button on the remote.</description>
+        <channels>
+            <channel id="standby" typeId="channel-type-remote-button"/>
+            <channel id="on" typeId="channel-type-remote-button"/>
+            <channel id="info" typeId="channel-type-remote-button"/>
+            <channel id="environment-setting" typeId="channel-type-remote-button"/>
+            <channel id="3d-setting" typeId="channel-type-remote-button"/>
+            <channel id="clear-motion-drive" typeId="channel-type-remote-button"/>
+            <channel id="lens-control" typeId="channel-type-remote-button"/>
+            <channel id="lens-memory" typeId="channel-type-remote-button"/>
+            <channel id="lens-aperture" typeId="channel-type-remote-button"/>
+            <channel id="mpc" typeId="channel-type-remote-button"/>
+            <channel id="picture-analyser" typeId="channel-type-remote-button"/>
+            <channel id="before-after" typeId="channel-type-remote-button"/>
+            <channel id="hide" typeId="channel-type-remote-button"/>
+            <channel id="up" typeId="channel-type-remote-button"/>
+            <channel id="down" typeId="channel-type-remote-button"/>
+            <channel id="right" typeId="channel-type-remote-button"/>
+            <channel id="left" typeId="channel-type-remote-button"/>
+            <channel id="ok" typeId="channel-type-remote-button"/>
+            <channel id="menu" typeId="channel-type-remote-button"/>
+            <channel id="back" typeId="channel-type-remote-button"/>
+            <channel id="film" typeId="channel-type-remote-button"/>
+            <channel id="cinema" typeId="channel-type-remote-button"/>
+            <channel id="anime" typeId="channel-type-remote-button"/>
+            <channel id="natural" typeId="channel-type-remote-button"/>
+            <channel id="photo" typeId="channel-type-remote-button"/>
+            <channel id="stage" typeId="channel-type-remote-button"/>
+            <channel id="thx" typeId="channel-type-remote-button"/>
+            <channel id="user" typeId="channel-type-remote-button"/>
+            <channel id="3d-format" typeId="channel-type-remote-button"/>
+            <channel id="advanced-menu" typeId="channel-type-remote-button"/>
+            <channel id="gamma" typeId="channel-type-remote-button"/>
+            <channel id="color-temperature" typeId="channel-type-remote-button"/>
+            <channel id="color-profile" typeId="channel-type-remote-button"/>
+            <channel id="picture-adjust" typeId="channel-type-remote-button"/>
+        </channels>
+    </channel-group-type>
+        
+    <channel-type id="channel-type-switch" advanced="false">
+        <item-type>Switch</item-type>
+        <label>Power</label>
+        <description>Channel triggered when data is received on from the Projector</description>
+        <autoUpdatePolicy>veto</autoUpdatePolicy>
+    </channel-type>
+
+    <channel-type id="channel-type-input" advanced="false">
+        <item-type>Number</item-type>
+        <label>Input</label>
+        <description>Channel triggered when data is received on from the Projector</description>
+        <autoUpdatePolicy>veto</autoUpdatePolicy>
+    </channel-type>
+
+	<channel-type id="channel-type-remote-button" advanced="false">
+		<item-type>String</item-type>
+		<label>Remote Button</label>
+        <description>A string command sent to this channel is equivalent to pressing the equivalent remote control button</description>
+        <autoUpdatePolicy>veto</autoUpdatePolicy>
+	</channel-type>
+
+</thing:thing-descriptions>
