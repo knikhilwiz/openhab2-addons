@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="honeywellvistaalarm"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+    <bridge-type id="panel">
+        <label>Honeywell Vista Panel</label>
+                <channels>
+            <channel id="bridge_reset" typeId="reset">
+                <label>Reset connection</label>
+                <description>Resets the RS232 connection</description>
+            </channel>
+            <channel id="send_command" typeId="command">
+                <label>Send Command</label>
+                <description>Send a command</description>
+            </channel>
+        </channels>
+        
+        <config-description>
+            <parameter name="serialPort" type="text" required="true">
+                <context>serial-port</context>
+                <label>Serial Port</label>
+                <description>The serial port name for the DSC IT-100. Valid values
+                    are e.g. COM1 for Windows and /dev/ttyS0 or
+                    /dev/ttyUSB0 for Linux.</description>
+            </parameter>
+
+            <parameter name="baud" type="integer" required="false">
+                <label>Baud Rate</label>
+                <description>The baud rate of the port. Only 9600 has been tested.</description>
+                <default>9600</default>
+            </parameter>
+
+            <parameter name="userCode" type="integer" required="true">
+                <label>User Code</label>
+                <description>The user code for all operations</description>
+            </parameter>
+
+            <parameter name="pollPeriod" type="integer" required="false" min="1" max="15">
+                <label>Poll Period</label>
+                <description>The poll period to verify connectivity (in minutes).</description>
+                <default>1</default>
+            </parameter>
+        </config-description>
+    </bridge-type>
+
+    <thing-type id="keypad">
+        <supported-bridge-type-refs>
+            <bridge-type-ref id="panel" />
+        </supported-bridge-type-refs>
+
+        <label>Honeywell Vista Alarm Keypad</label>
+        <description>Represents a keypad associated with a partition in a Honeywell Vista Alarm System.</description>
+
+        <channels>
+            <channel id="partition" typeId="partition">
+                <label>Partition Number</label>
+                <description>Partition Number</description>
+            </channel>
+            <channel id="arm_mode" typeId="arm_mode">
+                <label>Partition Arm Mode</label>
+                <description>Partition Arm Mode</description>
+            </channel>
+            <channel id="arm_command" typeId="arm_command">
+                <label>Partition Arm Command</label>
+                <description>Partition Arm Command</description>
+            </channel>
+            <channel id="armed_led" typeId="led">
+                <label>Partition Armed Led</label>
+                <description>Partition Armed Status (ON=Armed, OFF=Disarmed)</description>
+            </channel>
+            <channel id="trouble_led" typeId="led">
+                <label>Partition Trouble Led</label>
+                <description>Partition in Trouble</description>
+            </channel>
+            <channel id="ready_led" typeId="led">
+                <label>Partition Ready Led</label>
+                <description>Partition is Ready to Arm</description>
+            </channel>
+            <channel id="alarmActive" typeId="led">
+                <label>Alarm Active</label>
+            </channel>
+            <channel id="backlight" typeId="led">
+                <label>Keypad Backlight</label>
+                <description>Partition Backlight</description>
+            </channel>
+            <channel id="lastEventTime" typeId="datetime">
+                <label>Last Event Time</label>
+            </channel>
+            <channel id="lastEvent" typeId="message">
+                <label>Last Event</label>
+            </channel>
+            <channel id="display" typeId="message">
+                <label>Keypad Display</label>
+                <description>Keypad Display</description>
+            </channel>
+        </channels>
+
+        <config-description>
+            <parameter name="partitionNumber" type="integer" required="true" min="1" max="8">
+                <label>Partition Number</label>
+                <description>The Partition Number (1-8).</description>
+            </parameter>
+        </config-description>
+    </thing-type>
+
+    <thing-type id="zone">
+        <supported-bridge-type-refs>
+            <bridge-type-ref id="panel" />
+        </supported-bridge-type-refs>
+
+        <label>HoneywellVista Alarm Zone</label>
+        <description>Represents a physical device such as a door, window, or motion sensor.</description>
+
+        <channels>
+            <channel id="contact" typeId="contact">
+                <label>Zone Status</label>
+                <description>Zone Status (Open/Closed)</description>
+            </channel>
+            <channel id="name" typeId="number">
+                <label>Zone Number</label>
+                <description>Zone Number</description>
+            </channel>
+            <channel id="lastOpenTime" typeId="datetime">
+                <label>Last Open Time</label>
+            </channel>
+            <channel id="lastCloseTime" typeId="datetime">
+                <label>Last Close Time</label>
+            </channel>
+            <channel id="lastTroubleTime" typeId="datetime">
+                <label>Last Trouble Time</label>
+            </channel>
+            <channel id="lastAlarmTime" typeId="datetime">
+                <label>Last Alarm Time</label>
+            </channel>
+            <channel id="lastEventTime" typeId="datetime">
+                <label>Last Event Time</label>
+            </channel>
+            <channel id="message" typeId="message">
+                <label>Zone message</label>
+                <description>Zone message</description>
+            </channel>
+            <channel id="bypass" typeId="bypass">
+                <label>Zone Bypass Mode</label>
+                <description>Zone Bypass Mode (OFF=Armed, ON=Bypassed)</description>
+            </channel>
+            <channel id="alarm" typeId="led">
+                <label>Zone in Alarm</label>
+                <description>Zone In Alarm</description>
+            </channel>
+            <channel id="trouble" typeId="led">
+                <label>Zone Trouble</label>
+                <description>Zone Trouble</description>
+            </channel>
+            <channel id="partition" typeId="partition">
+                <label>Zone Partition</label>
+                <description>Zone Partition</description>
+            </channel>
+        </channels>
+
+        <config-description>
+            <parameter name="zoneNumber" type="integer" required="true" min="1" max="250">
+                <label>Zone Number</label>
+                <description>The Zone Number (1-250).</description>
+            </parameter>
+        </config-description>
+    </thing-type>
+
+</thing:thing-descriptions>

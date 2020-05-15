@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="honeywellvistaalarm"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+	<!-- bridge -->
+	<channel-type id="reset">
+		<item-type>trigger</item-type>
+		<label>Reset</label>
+	</channel-type>
+
+	<channel-type id="command">
+		<item-type>String</item-type>
+		<label>Send a Command</label>
+	</channel-type>
+
+	<!-- keypad -->
+	<channel-type id="led">
+		<item-type>Color</item-type>
+		<label>Keypad LED</label>
+		<category>Light</category>
+		<state readOnly="true" />
+	</channel-type>
+
+	<channel-type id="time">
+		<item-type>DateTime</item-type>
+		<label>Time</label>
+        <state readOnly="true" />
+	</channel-type>
+
+	<channel-type id="contact">
+		<item-type>Contact</item-type>
+		<label>Contact State</label>
+        <state readOnly="true" />
+	</channel-type>
+
+	<!-- partition -->
+    <channel-type id="arm_mode">
+        <item-type>String</item-type>
+        <label>Arm Mode</label>
+    </channel-type>
+	<channel-type id="arm_command">
+		<item-type>String</item-type>
+		<label>Arm Command</label>
+		<command>
+            <options>
+                <option value="ARM_STAY">Arm Stay</option>
+                <option value="ARM_AWAY">Arm Away</option>
+                <option value="ARM_INSTANT">Arm Night</option>
+                <option value="ARM_MAX">Arm Max</option>
+                <option value="ARM_FORCE_STAY">Force Arm Stay</option>
+                <option value="ARM_FORCE_AWAY">Force Arm Away</option>
+                <option value="DISARM">Disarm</option>
+            </options>
+        </command>
+	</channel-type>
+
+	<channel-type id="bypass">
+		<item-type>Switch</item-type>
+		<label>Bypass Mode</label>
+		<description>Bypass Mode (OFF=Not Bypassed, ON=Bypassed)</description>
+	</channel-type>
+
+	<!-- common -->
+    <channel-type id="message">
+        <item-type>String</item-type>
+        <label>Message</label>
+        <state pattern="%s" readOnly="true" />
+    </channel-type>
+
+    <channel-type id="number">
+        <item-type>Number</item-type>
+        <label>Number</label>
+        <state pattern="%d" readOnly="true" />
+    </channel-type>
+    
+    <channel-type id="datetime">
+        <item-type>DateTime</item-type>
+        <label>Timestamp</label>
+    </channel-type>
+
+    <channel-type id="partition">
+        <item-type>Number</item-type>
+        <label>Partition</label>
+        <state pattern="%d" min="1" max="8" readOnly="true" />
+    </channel-type>
+
+	<channel-type id="status">
+		<item-type>Switch</item-type>
+		<label>read only status</label>
+		<state readOnly="true" />
+	</channel-type>
+
+</thing:thing-descriptions>
