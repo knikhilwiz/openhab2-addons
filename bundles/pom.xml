@@ -128,6 +128,7 @@
     <module>org.openhab.binding.ipp</module>
     <module>org.openhab.binding.irtrans</module>
     <module>org.openhab.binding.jeelink</module>
+    <module>org.openhab.binding.jvcprojector</module>
     <module>org.openhab.binding.keba</module>
     <module>org.openhab.binding.km200</module>
     <module>org.openhab.binding.knx</module>

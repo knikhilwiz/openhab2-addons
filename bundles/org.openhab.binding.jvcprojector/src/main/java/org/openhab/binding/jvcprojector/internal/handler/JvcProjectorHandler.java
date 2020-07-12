@@ -18,17 +18,22 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.commons.lang.StringUtils;
 import org.eclipse.jdt.annotation.NonNull;
+import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.smarthome.core.common.ThreadPoolManager;
-import org.eclipse.smarthome.core.library.types.DecimalType;
 import org.eclipse.smarthome.core.library.types.OnOffType;
+import org.eclipse.smarthome.core.library.types.StringType;
 import org.eclipse.smarthome.core.thing.Channel;
 import org.eclipse.smarthome.core.thing.ChannelUID;
 import org.eclipse.smarthome.core.thing.Thing;
@@ -45,7 +50,6 @@ import org.slf4j.LoggerFactory;
  * The {@link JvcProjectorHandler} is responsible for handling commands, which are
  * sent to one of the channels.
  *
- * @author Mark Hilbush - Initial contribution for GlobalCacheHandler
  * @author Nick Hill - Heavily repurposed for handling JVC Projectors
  */
 public class JvcProjectorHandler extends BaseThingHandler {
@@ -57,8 +61,123 @@ public class JvcProjectorHandler extends BaseThingHandler {
     private ScheduledExecutorService scheduledExecutorService = ThreadPoolManager
             .getScheduledPool(JVCPROJECTOR_THREAD_POOL + "-" + thingID());
     private ScheduledFuture<?> scheduledFuture;
+    private @NonNullByDefault({}) ScheduledFuture<?> refreshJob;
 
     private LinkedBlockingQueue<RequestMessage> sendQueue = null;
+    ChannelUID powerStateChannelUID;
+    ChannelUID powerSwitchChannelUID;
+    int CHANNEL_REFRESH_SECONDS = 15;
+    boolean sourceSignal;
+
+    Map<String, Object> channelCommandMap = Stream.of(new Object[][] {
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_STATUS
+                    + JvcProjectorBindingConstants.CHANNEL_POWER_SWITCH, MainCommand.POWER },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_STATUS + JvcProjectorBindingConstants.CHANNEL_POWER_STATE,
+                    MainCommand.POWER },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_STATUS + JvcProjectorBindingConstants.CHANNEL_INPUT,
+                    MainCommand.INPUT },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_STATUS + JvcProjectorBindingConstants.CHANNEL_SOURCE,
+                    MainCommand.SOURCE },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_STATUS + JvcProjectorBindingConstants.CHANNEL_MODEL,
+                    MainCommand.MODEL },
+
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_INFO + JvcProjectorBindingConstants.CHANNEL_INPUT,
+                    InformationCommand.INPUT },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_INFO + JvcProjectorBindingConstants.CHANNEL_SOURCE_FORMAT,
+                    InformationCommand.SOURCE },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_INFO + JvcProjectorBindingConstants.CHANNEL_LAMP_TIME,
+                    InformationCommand.LAMP_TIME },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_INFO
+                    + JvcProjectorBindingConstants.CHANNEL_SOFTWARE_VERSION, InformationCommand.SOFTWARE_VERSION },
+
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_SOURCE_INFO
+                    + JvcProjectorBindingConstants.CHANNEL_HORIZONTAL_RESOLUTION,
+                    InformationCommand.HORIZONTAL_RESOLUTION },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_SOURCE_INFO
+                    + JvcProjectorBindingConstants.CHANNEL_VERTICAL_RESOLUTION,
+                    InformationCommand.VERTICAL_RESOLUTION },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_SOURCE_INFO
+                    + JvcProjectorBindingConstants.CHANNEL_HORIZONTAL_FREQUENCY,
+                    InformationCommand.HORIZONTAL_FREQUENCY },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_SOURCE_INFO
+                    + JvcProjectorBindingConstants.CHANNEL_VERTICAL_FREQUENCY, InformationCommand.VERTICAL_FREQUENCY },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_SOURCE_INFO
+                    + JvcProjectorBindingConstants.CHANNEL_DEEP_COLOR, InformationCommand.DEEP_COLOR },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_SOURCE_INFO
+                    + JvcProjectorBindingConstants.CHANNEL_COLOR_SPACE, InformationCommand.COLOR_SPACE },
+
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_STANDBY,
+                    RemoteCommand.STANDBY },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_ON,
+                    RemoteCommand.ON },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_INPUT,
+                    RemoteCommand.INPUT },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_INFO,
+                    RemoteCommand.INFO },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE
+                    + JvcProjectorBindingConstants.CHANNEL_B_ENVIRONMENT_SETTING, RemoteCommand.ENVIRONMENT_SETTING },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE
+                    + JvcProjectorBindingConstants.CHANNEL_B_3D_SETTING, RemoteCommand.SETTING_3D },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE
+                    + JvcProjectorBindingConstants.CHANNEL_B_CLEAR_MOTION_DRIVE, RemoteCommand.CLEAR_MOTION_DRIVE },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE
+                    + JvcProjectorBindingConstants.CHANNEL_B_LENS_CONTROL, RemoteCommand.LENS_CONTROL },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE
+                    + JvcProjectorBindingConstants.CHANNEL_B_LENS_MEMORY, RemoteCommand.LENS_MEMORY },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE
+                    + JvcProjectorBindingConstants.CHANNEL_B_LENS_APERTURE, RemoteCommand.LENS_APERTURE },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_MPC,
+                    RemoteCommand.MPC },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE
+                    + JvcProjectorBindingConstants.CHANNEL_B_PICTURE_ANALYSER, RemoteCommand.PICTURE_ANALYSER },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE
+                    + JvcProjectorBindingConstants.CHANNEL_B_BEFORE_AFTER, RemoteCommand.BEFORE_AFTER },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_HIDE,
+                    RemoteCommand.HIDE },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_UP,
+                    RemoteCommand.UP },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_DOWN,
+                    RemoteCommand.DOWN },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_RIGHT,
+                    RemoteCommand.RIGHT },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_LEFT,
+                    RemoteCommand.LEFT },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_OK,
+                    RemoteCommand.OK },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_MENU,
+                    RemoteCommand.MENU },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_BACK,
+                    RemoteCommand.BACK },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_FILM,
+                    RemoteCommand.FILM },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_CINEMA,
+                    RemoteCommand.CINEMA },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_ANIME,
+                    RemoteCommand.ANIME },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_NATURAL,
+                    RemoteCommand.NATURAL },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_PHOTO,
+                    RemoteCommand.PHOTO },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_STAGE,
+                    RemoteCommand.STAGE },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_THX,
+                    RemoteCommand.THX },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_USER,
+                    RemoteCommand.USER },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_3D_FORMAT,
+                    RemoteCommand.FORMAT_3D },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE
+                    + JvcProjectorBindingConstants.CHANNEL_B_ADVANCED_MENU, RemoteCommand.ADVANCED_MENU },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE + JvcProjectorBindingConstants.CHANNEL_B_GAMMA,
+                    RemoteCommand.GAMMA },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE
+                    + JvcProjectorBindingConstants.CHANNEL_B_COLOR_TEMPERATURE, RemoteCommand.COLOR_TEMPERATURE },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE
+                    + JvcProjectorBindingConstants.CHANNEL_B_COLOR_PROFILE, RemoteCommand.COLOR_PROFILE },
+            { JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE
+                    + JvcProjectorBindingConstants.CHANNEL_B_PICTURE_ADJUST, RemoteCommand.PICTURE_ADJUST },
+
+    }).collect(Collectors.toMap(data -> (String) data[0], data -> data[1]));
 
     private boolean powerOn = false;
 
@@ -72,6 +191,16 @@ public class JvcProjectorHandler extends BaseThingHandler {
     public void initialize() {
         logger.debug("Initializing thing {}", thingID());
         scheduledFuture = scheduledExecutorService.schedule(commandProcessor, 2, TimeUnit.SECONDS);
+        JvcProjectorCommand cmd = new JvcProjectorCommand(sendQueue, MainCommand.CHECK);
+        cmd.execute();
+
+        powerStateChannelUID = new ChannelUID(thing.getUID(), JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_STATUS,
+                JvcProjectorBindingConstants.CHANNEL_POWER_STATE);
+        powerSwitchChannelUID = new ChannelUID(thing.getUID(), JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_STATUS,
+                JvcProjectorBindingConstants.CHANNEL_POWER_SWITCH);
+
+        refreshJob = scheduler.scheduleWithFixedDelay(this::refreshChannels, CHANNEL_REFRESH_SECONDS,
+                CHANNEL_REFRESH_SECONDS, TimeUnit.SECONDS);
     }
 
     @Override
@@ -81,20 +210,30 @@ public class JvcProjectorHandler extends BaseThingHandler {
         if (scheduledFuture != null) {
             scheduledFuture.cancel(false);
         }
+        if (refreshJob != null && !refreshJob.isCancelled()) {
+            refreshJob.cancel(true);
+            refreshJob = null;
+        }
+    }
+
+    @Override
+    public void handleConfigurationUpdate(Map<@NonNull String, @NonNull Object> configurationParameters) {
+        super.handleConfigurationUpdate(configurationParameters);
+        super.thingUpdated(getThing());
     }
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
         // Don't try to send command if the device is not online
         if (!isOnline()) {
-            logger.debug("Can't handle command {} for {} because handler for thing {} is not ONLINE", command,
+            logger.trace("Can't handle command {} for {} because handler for thing {} is not ONLINE", command,
                     channelUID.getId(), thingID());
             return;
         }
 
         Channel channel = thing.getChannel(channelUID.getId());
         if (channel == null) {
-            logger.warn("Unknown channel {} for thing {}; is item defined correctly", channelUID.getId(), thingID());
+            logger.warn("Unknown channel {} for thing {}; is item defined correctly?", channelUID.getId(), thingID());
             return;
         }
 
@@ -103,104 +242,129 @@ public class JvcProjectorHandler extends BaseThingHandler {
             return;
         }
 
-        switch (channel.getChannelTypeUID().getId()) {
-            case JvcProjectorBindingConstants.CHANNEL_TYPE_SWITCH:
-            case JvcProjectorBindingConstants.CHANNEL_TYPE_INPUT:
-            case JvcProjectorBindingConstants.CHANNEL_TYPE_REMOTE_BUTTON:
-                handleSend(command, channelUID);
-                break;
-            default:
-                logger.warn("Thing {} has unknown channel type {}", thingID(), channel.getChannelTypeUID().getId());
-                break;
+        handleSend(command, channelUID);
+    }
+
+    Object getCommandType(String groupId, String channelId) {
+        return channelCommandMap.get(groupId + channelId);
+    }
+
+    void refreshChannels() {
+        if (!isOnline()) {
+            return;
         }
+        logger.trace("Update Channels for:{}", thing.getUID());
+        getThing().getChannels().forEach(channel -> handleCommand(channel.getUID(), RefreshType.REFRESH));
     }
 
     private void handleSend(Command command, ChannelUID channelUID) {
         logger.debug("Handling Send command {} on channel {} of thing {}", command, channelUID.getId(), thingID());
 
-        String op;
-        String id = channelUID.getIdWithoutGroup();
-        switch (id) {
-            case JvcProjectorBindingConstants.CHANNEL_POWER_STATE:
-                op = id + command.toString();
-                break;
-            case JvcProjectorBindingConstants.CHANNEL_INPUT_STATE:
-                if (command.toString().equals("1") || command.toString().equals("2")) {
-                    op = id + command.toString();
+        String groupId = channelUID.getGroupId();
+        String channelId = channelUID.getIdWithoutGroup();
 
-                } else {
-                    logger.error("Only acceptable values for {} are \"1\" and \"2\"", channelUID.toString());
+        JvcProjectorCommand sendReq;
+
+        switch (groupId) {
+            case JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_STATUS:
+                MainCommand mainCmd = (MainCommand) getCommandType(groupId, channelId);
+                if (!mainCmd.isModifyable()) {
                     return;
                 }
+                sendReq = new JvcProjectorCommand(sendQueue, mainCmd, command.toString());
+                break;
+            case JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_REMOTE:
+                RemoteCommand remoteCmd = (RemoteCommand) getCommandType(groupId, command.toString());
+                sendReq = new JvcProjectorCommand(sendQueue, remoteCmd);
+                break;
             default:
-                op = id;
+                // no other channel groups accept commands
+                return;
         }
-        JvcProjectorCommand cmd = new JvcProjectorCommand(thingID(), sendQueue, op);
-        cmd.execute();
-        if (cmd.isSuccessful()) {
-            switch (id) {
+
+        // ping first
+        JvcProjectorCommand checkReq = new JvcProjectorCommand(sendQueue, MainCommand.CHECK);
+        checkReq.execute();
+        sendReq.execute();
+
+        if (sendReq.isSuccessful()) {
+            switch (channelId) {
+                case JvcProjectorBindingConstants.CHANNEL_POWER_SWITCH:
                 case JvcProjectorBindingConstants.CHANNEL_POWER_STATE:
-                    updateState(channelUID, (OnOffType) command);
+                    handlePowerStateChange(sendReq.getResponse());
                     break;
-                case JvcProjectorBindingConstants.CHANNEL_INPUT_STATE:
-                    updateState(channelUID, (DecimalType) command);
+                default:
+                    updateState(channelUID.getId(), StringType.valueOf(sendReq.getResponse()));
                     break;
             }
         }
     }
 
+    private void handlePowerStateChange(String response) {
+        OnOffType state = OnOffType.from(response);
+        if (state.equals(OnOffType.ON)) {
+            markDevicePowerOn();
+        } else {
+            markDevicePowerOff();
+        }
+        updateState(powerSwitchChannelUID, state);
+        updateState(powerStateChannelUID, StringType.valueOf(response));
+    }
+
     private void handleRefresh(Channel channel) {
-        if (!channel.getUID().getGroupId().equals(JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_STATUS)) {
-            // Nothing to refresh
-            return;
+        String groupId = channel.getUID().getGroupId();
+        String channelId = channel.getUID().getIdWithoutGroup();
+
+        JvcProjectorCommand refreshReq;
+
+        switch (groupId) {
+            case JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_STATUS:
+                MainCommand mainCmd = (MainCommand) getCommandType(groupId, channelId);
+                if (!mainCmd.isQueryable()) {
+                    return;
+                }
+                refreshReq = new JvcProjectorCommand(sendQueue, mainCmd);
+                break;
+            case JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_SOURCE_INFO:
+                if (!sourceSignal || !powerOn) {
+                    return;
+                }
+            case JvcProjectorBindingConstants.CHANNEL_GROUP_TYPE_INFO:
+                if (!powerOn) {
+                    return;
+                }
+                InformationCommand infoCmd = (InformationCommand) getCommandType(groupId, channelId);
+                if (infoCmd == null) {
+                    logger.error("Unable to find command for Channel: group: {} ; id: {}", groupId, channelId);
+                    return;
+                }
+                refreshReq = new JvcProjectorCommand(sendQueue, infoCmd);
+                break;
+            default:
+                // Nothing to refresh
+                return;
         }
 
-        if (!channel.getUID().getIdWithoutGroup().equals(JvcProjectorBindingConstants.CHANNEL_POWER_STATE)
-                && !powerOn) {
-            logger.trace(
-                    "Channels other than power can only be queried when thing {} is powered on. Skipping REFRESH for {}.",
-                    thingID(), channel.getUID().getIdWithoutGroup());
-            return;
-        }
+        logger.debug("Handle REFRESH command on channel {} for thing {}", channel.getUID(), thingID());
+        refreshReq.execute();
 
-        logger.debug("Handle REFRESH command on channel {} for thing {}", channel.getUID().getId(), thingID());
-
-        JvcProjectorCommand cmd = new JvcProjectorCommand(thingID(), sendQueue, channel.getUID().getIdWithoutGroup());
-        cmd.execute();
-        if (cmd.isSuccessful()) {
-            String[] parts = cmd.deviceReply.split(" ");
-            if (!parts[0].equals("40")) {
-                logger.error("Unable to parse response from thing {}: {}", thing.getLabel(), cmd.deviceReply);
-            }
-            switch (Integer.parseInt(parts[5])) {
-                case 30:
-                    updateState(channel.getUID(), OnOffType.OFF);
-                    triggerChannel(channel.getUID(), OnOffType.OFF.toString());
-                    markDevicePowerOff();
+        if (refreshReq.isSuccessful()) {
+            switch (channelId) {
+                case JvcProjectorBindingConstants.CHANNEL_POWER_SWITCH:
+                case JvcProjectorBindingConstants.CHANNEL_POWER_STATE:
+                    handlePowerStateChange(refreshReq.getResponse());
                     break;
-                case 31:
-                    updateState(channel.getUID(), OnOffType.ON);
-                    triggerChannel(channel.getUID(), OnOffType.OFF.toString());
-                    markDevicePowerOn();
-                    break;
-                case 32:
-                    triggerChannel(channel.getUID(), "unit in cool down mode");
-                    markDevicePowerOff();
-                    break;
-                case 34:
-                    triggerChannel(channel.getUID(), "unit in error mode");
-                    markDevicePowerOff();
-                    break;
-                case 36:
-                    updateState(channel.getUID(), new DecimalType(1));
-                    triggerChannel(channel.getUID(), "HDMI1");
-                    break;
-                case 37:
-                    updateState(channel.getUID(), new DecimalType(2));
-                    triggerChannel(channel.getUID(), "HDMI2");
+                case JvcProjectorBindingConstants.CHANNEL_SOURCE:
+                    handleSource(refreshReq.getResponse());
+                default:
+                    updateState(channel.getUID().getId(), StringType.valueOf(refreshReq.getResponse()));
                     break;
             }
         }
+    }
+
+    private void handleSource(String response) {
+        sourceSignal = !response.equals("No signal");
     }
 
     public String getConfigIP() {
@@ -246,6 +410,7 @@ public class JvcProjectorHandler extends BaseThingHandler {
     private void markDevicePowerOff() {
         logger.trace("Device is marked power OFF for thing {}. All commands DISABLED.", thingID());
         powerOn = false;
+        getThing().getChannels().forEach(channel -> updateState(channel.getUID().getId(), StringType.EMPTY));
     }
 
     private void markThingOfflineWithError(ThingStatusDetail statusDetail, String statusMessage) {
@@ -282,7 +447,6 @@ public class JvcProjectorHandler extends BaseThingHandler {
      * caller by placing a message in a response queue. Device response time is typically well below 100 ms, hence the
      * reason for a relatively low timeout when reading the response queue.
      *
-     * @author Mark Hilbush - Initial contribution for GlobalCacheHandler
      * @author Nick Hill - Heavily re-purposed for handling JVC Projectors
      */
     private class CommandProcessor extends Thread {
@@ -292,9 +456,9 @@ public class JvcProjectorHandler extends BaseThingHandler {
         private final String TERMINATE_COMMAND = "terminate";
 
         private final int SEND_QUEUE_MAX_DEPTH = 10;
-        private final int SEND_QUEUE_TIMEOUT = 2000;
+        private final int SEND_QUEUE_TIMEOUT = 5000;
 
-        private ConnectionManager connectionManager;
+        private ProjectorConnection connectionManager;
 
         public CommandProcessor() {
             super("JvcProjector JvcProjectorCommand Processor");
@@ -317,14 +481,13 @@ public class JvcProjectorHandler extends BaseThingHandler {
         @Override
         public void run() {
             logger.debug("JvcProjectorCommand processor STARTING for thing {} at IP {}", thingID(), getConfigIP());
-            connectionManager = new ConnectionManager();
-            connectionManager.scheduleConnectionMonitorJob();
-            sendQueue.clear();
+            connectionManager = new ProjectorConnection();
             terminate = false;
 
             try {
                 RequestMessage requestMessage;
                 while (!terminate) {
+                    connectionManager.connect();
                     requestMessage = sendQueue.poll(SEND_QUEUE_TIMEOUT, TimeUnit.MILLISECONDS);
                     if (requestMessage != null) {
                         if (requestMessage.getCommandName().equals(TERMINATE_COMMAND)) {
@@ -333,28 +496,29 @@ public class JvcProjectorHandler extends BaseThingHandler {
                         }
 
                         byte[] deviceReply = {};
-                        connectionManager.connect();
+
                         if (connectionManager.isConnected()) {
                             try {
                                 long startTime = System.currentTimeMillis();
                                 writeCommandToDevice(requestMessage);
                                 int responsesNeeded = requestMessage.getNumResponses();
                                 while (responsesNeeded-- > 0) {
-                                    deviceReply = readReplyFromDevice();
+                                    deviceReply = connectionManager.readReplyFromDevice();
                                     long endTime = System.currentTimeMillis();
-                                    logger.debug("Transaction '{}' for thing {} at {} took {} ms",
+                                    logger.debug("Response for '{}' for thing {} at {} received in {} ms: {}",
                                             requestMessage.getCommandName(), thingID(), getConfigIP(),
-                                            endTime - startTime);
+                                            endTime - startTime, JvcProjectorCommand.getAsHexString(deviceReply));
 
-                                    logger.trace("Processor for thing {} queuing response message: {}", thingID(),
-                                            getAsHexString(deviceReply));
                                     requestMessage.getReceiveQueue().put(deviceReply);
                                 }
                             } catch (IOException e) {
                                 logger.error("Comm error for thing {} at {}: {}", thingID(), getConfigIP(),
                                         e.getMessage());
-                                connectionManager.setCommError("ERROR: " + e.getMessage());
-                                connectionManager.disconnect();
+                                if (!(e instanceof SocketTimeoutException)) {
+                                    connectionManager.setCommError("ERROR: " + e.getMessage());
+                                    connectionManager.disconnect();
+                                }
+                                requestMessage.getReceiveQueue().put(new byte[] {});
                             }
                         } else {
                             connectionManager.setCommError("ERROR: No connection to device");
@@ -366,7 +530,6 @@ public class JvcProjectorHandler extends BaseThingHandler {
                 Thread.currentThread().interrupt();
             }
 
-            connectionManager.cancelConnectionMonitorJob();
             connectionManager.disconnect();
             connectionManager = null;
             logger.debug("JvcProjectorCommand processor TERMINATING for thing {} at IP {}", thingID(), getConfigIP());
@@ -376,57 +539,12 @@ public class JvcProjectorHandler extends BaseThingHandler {
          * Write the command to the device.
          */
         private void writeCommandToDevice(RequestMessage requestMessage) throws IOException {
-            DataOutputStream stream = connectionManager.getCommandOut();
-            if (stream == null) {
-                logger.debug("Error writing to device because output stream object is null");
-                return;
-            }
-
-            byte[] deviceCommand = requestMessage.getDeviceCommand();
+            byte[] deviceCommand = requestMessage.getCommandBytes();
 
             logger.trace("Processor for thing {} writing command to device: {}", thingID(),
-                    getAsHexString(deviceCommand));
+                    JvcProjectorCommand.getAsHexString(deviceCommand));
 
-            stream.write(deviceCommand);
-            stream.write(0x0a);
-            stream.flush();
-        }
-
-        /*
-         * Read command reply from the device, then remove the CR at the end of the line.
-         */
-        private byte[] readReplyFromDevice() throws IOException {
-            logger.trace("Processor for thing {} reading reply from device", thingID());
-
-            DataInputStream stream = connectionManager.getCommandIn();
-
-            if (stream == null) {
-                logger.debug("Error reading from device because input stream object is null");
-                throw new IOException("ERROR: BufferedReader is null!");
-            }
-
-            logger.trace("Processor for thing {} reading response from device", thingID());
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            final int MAX_RESPONSE_SIZE = 50;
-
-            while (bytes.size() < MAX_RESPONSE_SIZE) {
-                int i = stream.read();
-                if (i == 0x0a || i == -1) {
-                    break;
-                }
-                bytes.write(i & 0xff);
-            }
-            return bytes.toByteArray();
-        }
-
-        private String getAsHexString(byte[] b) {
-            StringBuilder sb = new StringBuilder();
-
-            for (int j = 0; j < b.length; j++) {
-                String s = String.format("%02x ", b[j]);
-                sb.append(s);
-            }
-            return sb.toString();
+            connectionManager.writeCommand(deviceCommand);
         }
     }
 
@@ -438,32 +556,19 @@ public class JvcProjectorHandler extends BaseThingHandler {
      *
      * @author Nick Hill - Heavily re-purposed for handling JVC Projectors
      */
-    private class ConnectionManager {
-        private Logger logger = LoggerFactory.getLogger(ConnectionManager.class);
-
-        private DeviceConnection commandConnection;
+    private class ProjectorConnection {
+        private Logger logger = LoggerFactory.getLogger(ProjectorConnection.class);
 
         private boolean deviceIsConnected;
 
         private final int SOCKET_CONNECT_TIMEOUT = 1500;
         // used for all other operations on socket.
         private final int SOCKET_TIMEOUT = 1000;
+        private Socket socket;
+        private DataInputStream dataInputStream;
+        private DataOutputStream dataOutputStream;
 
-        private ScheduledFuture<?> connectionMonitorJob;
-        private final int CONNECTION_MONITOR_FREQUENCY = 10;
-        private final int CONNECTION_MONITOR_START_DELAY = 5;
-
-        private Runnable connectionMonitorRunnable = () -> {
-            logger.trace("Performing connection check for thing {} at IP {}", thingID(), commandConnection.getIP());
-            checkConnection();
-        };
-
-        public ConnectionManager() {
-            commandConnection = new DeviceConnection();
-
-            commandConnection.setIP(getIPAddress());
-            commandConnection.setPort(getPort());
-
+        public ProjectorConnection() {
             deviceIsConnected = false;
         }
 
@@ -481,6 +586,7 @@ public class JvcProjectorHandler extends BaseThingHandler {
             if (port == null) {
                 logger.debug("Handler for thing {} could not get IP address from config", thingID());
                 markThingOfflineWithError(ThingStatusDetail.OFFLINE.CONFIGURATION_ERROR, "Port not set");
+                return -1;
             }
             return port.intValue();
         }
@@ -494,109 +600,102 @@ public class JvcProjectorHandler extends BaseThingHandler {
                 return;
             }
 
-            // Get a connection to the command port
-            if (!commandConnect(commandConnection)) {
+            logger.debug("Connecting to {} port for thing {} at IP {}", getPort(), thingID(), getIPAddress());
+            if (!openSocket()) {
+                return;
+            }
+            // create streams
+            try {
+                dataInputStream = new DataInputStream(socket.getInputStream());
+                dataOutputStream = new DataOutputStream(socket.getOutputStream());
+            } catch (IOException e) {
+                logger.debug("Error getting streams to {} port for thing {} at {}, exception={}", getPort(), thingID(),
+                        getIPAddress(), e.getMessage());
+                markThingOfflineWithError(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, e.getMessage());
+                closeSocket();
+                return;
+            }
+            logger.info("Got a connection to {} port for thing {} at {}", getPort(), thingID(), getIPAddress());
+
+            if (!doHandshake()) {
                 return;
             }
 
-            if (!commandHandshake(commandConnection)) {
-                return;
-            }
-
-            /*
-             * All connections opened successfully, so we can mark the thing online
-             * and start the serial port readers
-             */
             markThingOnline();
             deviceIsConnected = true;
         }
 
-        private boolean commandHandshake(DeviceConnection conn) {
+        private boolean doHandshake() {
             boolean handshakeComplete = false;
             final String PJ_OK = "PJ_OK";
             final String PJACK = "PJACK";
             final String PJREQ = "PJREQ";
 
-            logger.debug("Starting handshake with thing {} at {}:{}", thingID(), conn.getIP(), conn.getPort());
+            logger.debug("Starting handshake with thing {}", thingID());
             // Ensure that the handshake completes quickly
             try {
                 byte[] cbuf = new byte[PJ_OK.length()];
-                int bytesRead = conn.getCommandIn().read(cbuf, 0, PJ_OK.length());
-                logger.trace("Recieved from {} at {}:{} => {}", thingID(), conn.getIP(), conn.getPort(), cbuf);
+                int bytesRead = dataInputStream.read(cbuf, 0, PJ_OK.length());
+                logger.trace("Recieved from {} at {}:{} => {}", thingID(), getIPAddress(), getPort(), cbuf);
 
                 if (bytesRead == PJ_OK.length() && Arrays.equals(cbuf, PJ_OK.getBytes())) {
-                    conn.getCommandOut().write(PJREQ.getBytes());
-                    conn.getCommandOut().flush();
+                    dataOutputStream.write(PJREQ.getBytes());
+                    dataOutputStream.flush();
 
-                    bytesRead = conn.getCommandIn().read(cbuf, 0, PJACK.length());
+                    bytesRead = dataInputStream.read(cbuf, 0, PJACK.length());
                     if (bytesRead == PJACK.length() && Arrays.equals(cbuf, PJACK.getBytes())) {
                         handshakeComplete = true;
                     } else {
                         logger.error("Projector (thing {}) at {}:{} unresponsive on protocol handshake. Got {}",
-                                thingID(), conn.getIP(), conn.getPort(), cbuf);
+                                thingID(), getIPAddress(), getPort(), cbuf);
                         markThingOfflineWithError(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
                                 "protocol handshake response timeout/error");
-                        closeSocket(conn);
+                        closeSocket();
                     }
                 } else {
                     logger.error("Projector (thing {}) at {}:{} did not initiate protocol handshake. Got {}", thingID(),
-                            conn.getIP(), conn.getPort(), cbuf);
+                            getIPAddress(), getPort(), cbuf);
                     markThingOfflineWithError(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
                             "did not indicate protocol handshake");
-                    closeSocket(conn);
+                    closeSocket();
                 }
             } catch (IOException e) {
-                logger.debug("Error performing handshake with thing {} at {}:{}, exception={}", thingID(), conn.getIP(),
-                        conn.getPort(), e.getMessage());
-                closeSocket(conn);
+                logger.debug("Error performing handshake with thing {} at {}:{}, exception={}", thingID(),
+                        getIPAddress(), getPort(), e.getMessage());
+                closeSocket();
             }
 
             return handshakeComplete;
         }
 
-        private boolean commandConnect(DeviceConnection conn) {
-            logger.debug("Connecting to {} port for thing {} at IP {}", conn.getPort(), thingID(), conn.getIP());
-            if (!openSocket(conn)) {
-                return false;
-            }
-            // create streams
+        private boolean openSocket() {
             try {
-                conn.setCommandIn(new DataInputStream(conn.getSocket().getInputStream()));
-                conn.setCommandOut(new DataOutputStream(conn.getSocket().getOutputStream()));
+                socket = new Socket();
+                socket.setSoTimeout(SOCKET_TIMEOUT);
+                socket.connect(new InetSocketAddress(getIPAddress(), getPort()), SOCKET_CONNECT_TIMEOUT);
             } catch (IOException e) {
-                logger.debug("Error getting streams to {} port for thing {} at {}, exception={}", conn.getPort(),
-                        thingID(), conn.getIP(), e.getMessage());
-                markThingOfflineWithError(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, e.getMessage());
-                closeSocket(conn);
-                return false;
-            }
-            logger.info("Got a connection to {} port for thing {} at {}", conn.getPort(), thingID(), conn.getIP());
-
-            return true;
-        }
-
-        private boolean openSocket(DeviceConnection conn) {
-            try {
-                conn.setSocket(new Socket());
-                conn.getSocket().setSoTimeout(SOCKET_TIMEOUT);
-                conn.getSocket().connect(new InetSocketAddress(conn.getIP(), conn.getPort()), SOCKET_CONNECT_TIMEOUT);
-            } catch (IOException e) {
-                logger.debug("Failed to get socket on {} port for thing {} at {}: {}", conn.getPort(), thingID(),
-                        conn.getIP(), e.getMessage());
+                logger.debug("Failed to get socket on {} port for thing {} at {}: {}", getPort(), thingID(),
+                        getIPAddress(), e.getMessage());
+                socket = null;
                 return false;
             }
             return true;
         }
 
-        private void closeSocket(DeviceConnection conn) {
-            if (conn.getSocket() != null) {
+        void closeSocket() {
+            if (socket != null) {
                 try {
-                    conn.getSocket().close();
+                    socket.close();
+                    dataInputStream = null;
+                    dataOutputStream = null;
+                    socket = null;
+                    logger.debug("Closed socket on {} port for thing {} at {}", getPort(), thingID(), getIPAddress());
                 } catch (IOException e) {
-                    logger.debug("Failed to close socket on {} port for thing {} at {}", conn.getPort(), thingID(),
-                            conn.getIP());
+                    logger.debug("Failed to close socket on {} port for thing {} at {}", getPort(), thingID(),
+                            getIPAddress());
                 }
             }
+            deviceIsConnected = false;
         }
 
         /*
@@ -604,23 +703,10 @@ public class JvcProjectorHandler extends BaseThingHandler {
          * connections if the devices have serial ports.
          */
         protected void disconnect() {
-            logger.trace("Disconnecting from thing {} at {}:{}", thingID(), commandConnection.getIP(),
-                    commandConnection.getPort());
+            logger.trace("Disconnecting from thing {} at {}:{}", thingID(), getIPAddress(), getPort());
 
-            commandDisconnect(commandConnection);
             markThingOffline();
-            deviceIsConnected = false;
-        }
-
-        private void commandDisconnect(DeviceConnection conn) {
-            deviceDisconnect(conn);
-        }
-
-        private void deviceDisconnect(DeviceConnection conn) {
-            logger.debug("Disconnecting from {} port for thing {} at IP {}", conn.getPort(), thingID(), conn.getIP());
-
-            closeSocket(conn);
-            conn.reset();
+            closeSocket();
         }
 
         private boolean isConnected() {
@@ -631,121 +717,39 @@ public class JvcProjectorHandler extends BaseThingHandler {
             markThingOfflineWithError(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, errorMessage);
         }
 
-        /*
-         * Retrieve the input/output streams for command and serial connections.
-         */
-        protected DataInputStream getCommandIn() {
-            return commandConnection.getCommandIn();
-        }
-
-        protected DataOutputStream getCommandOut() {
-            return commandConnection.getCommandOut();
+        public void writeCommand(byte[] commandBytes) throws IOException {
+            dataOutputStream.write(commandBytes);
+            dataOutputStream.write(0x0a);
+            dataOutputStream.flush();
         }
 
         /*
-         * Periodically validate the command connection to the device by executing a check connection command.
+         * Read command reply from the device, then remove the CR at the end of the line.
          */
-        private void scheduleConnectionMonitorJob() {
-            logger.debug("Starting connection monitor job for thing {} at IP {}", thingID(), commandConnection.getIP());
-            connectionMonitorJob = scheduler.scheduleWithFixedDelay(connectionMonitorRunnable,
-                    CONNECTION_MONITOR_START_DELAY, CONNECTION_MONITOR_FREQUENCY, TimeUnit.SECONDS);
-        }
+        private byte[] readReplyFromDevice() throws IOException {
+            logger.trace("Processor for thing {} reading reply from device", thingID());
 
-        private void cancelConnectionMonitorJob() {
-            if (connectionMonitorJob != null) {
-                logger.debug("Canceling connection monitor job for thing {} at IP {}", thingID(),
-                        commandConnection.getIP());
-                connectionMonitorJob.cancel(true);
-                connectionMonitorJob = null;
-            }
-        }
-
-        private void checkConnection() {
-            connect();
-            if (!isConnected()) {
-                return;
+            if (dataInputStream == null) {
+                logger.debug("Error reading from device because input stream object is null");
+                throw new IOException("ERROR: BufferedReader is null!");
             }
 
-            JvcProjectorCommand checkCommand = new JvcProjectorCommand(thingID(), sendQueue, "");
-            checkCommand.executeQuiet();
+            logger.trace("Processor for thing {} reading response from device", thingID());
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            final int MAX_RESPONSE_SIZE = 50;
 
-            if (checkCommand.isSuccessful()) {
-                logger.trace("Connection check successful for thing {} at IP {}", thingID(), commandConnection.getIP());
-                markThingOnline();
-                deviceIsConnected = true;
-            } else {
-                logger.debug("Connection check failed for thing {} at IP {}", thingID(), commandConnection.getIP());
-                disconnect();
+            int i;
+            while (bytes.size() < MAX_RESPONSE_SIZE) {
+                i = dataInputStream.read();
+                if (i == 0x0a) {
+                    break;
+                }
+                if (i == -1) {
+                    throw new IOException("ERROR: truncated read");
+                }
+                bytes.write(i & 0xff);
             }
-        }
-    }
-
-    /*
-     * The {@link DeviceConnection} class stores information about the connection to a jvcprojector device.
-     *
-     * @author Mark Hilbush - Initial contribution for GlobalCacheHandler
-     *
-     * @author Nick Hill - Re-purposed for handling JVC Projectors
-     */
-    private class DeviceConnection {
-        private int port;
-        private String ipAddress;
-        private Socket socket;
-        private DataInputStream commandIn;
-        private DataOutputStream commandOut;
-
-        DeviceConnection() {
-            setPort(-1);
-            setIP(null);
-            setSocket(null);
-            setCommandIn(null);
-            setCommandOut(null);
-        }
-
-        public void reset() {
-            setSocket(null);
-            setCommandIn(null);
-            setCommandOut(null);
-        }
-
-        public int getPort() {
-            return port;
-        }
-
-        public void setPort(int port) {
-            this.port = port;
-        }
-
-        public String getIP() {
-            return ipAddress;
-        }
-
-        public void setIP(String ipAddress) {
-            this.ipAddress = ipAddress;
-        }
-
-        public Socket getSocket() {
-            return socket;
-        }
-
-        public void setSocket(Socket socket) {
-            this.socket = socket;
-        }
-
-        public DataInputStream getCommandIn() {
-            return commandIn;
-        }
-
-        public void setCommandIn(DataInputStream dataInputStream) {
-            this.commandIn = dataInputStream;
-        }
-
-        public DataOutputStream getCommandOut() {
-            return commandOut;
-        }
-
-        public void setCommandOut(DataOutputStream commandOut) {
-            this.commandOut = commandOut;
+            return bytes.toByteArray();
         }
     }
 }

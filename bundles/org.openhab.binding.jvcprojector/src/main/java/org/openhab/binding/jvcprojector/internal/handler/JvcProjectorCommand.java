@@ -12,18 +12,209 @@
  */
 package org.openhab.binding.jvcprojector.internal.handler;
 
-import java.util.AbstractMap.SimpleEntry;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import org.apache.commons.lang.ArrayUtils;
-import org.openhab.binding.jvcprojector.internal.JvcProjectorBindingConstants;
-import org.openhab.core.library.types.OnOffType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+enum MainCommand {
+    CHECK("\0\0"),
+    POWER("PW", "0", "OFF", "ON", "Cooling", "Warming", "Error"),
+    INPUT("IP", "6", "HDMI1", "HDMI2"),
+    REMOTE("RC"),
+    SOURCE("SC", "0", "No signal", "Signal available"),
+    MODEL("MD"),
+    INFORMATION("IF");
+
+    static {
+        CHECK.queryable = false;
+        REMOTE.queryable = false;
+        SOURCE.modifyable = false;
+        MODEL.modifyable = false;
+        INFORMATION.modifyable = false;
+    }
+
+    private final String command;
+    private boolean queryable = true;
+    private boolean modifyable = true;
+    private int offset;
+    private String[] returnValues;
+
+    boolean isModifyable() {
+        return modifyable;
+    }
+
+    boolean isQueryable() {
+        return queryable;
+    }
+
+    static Map<String, MainCommand> lookup = new HashMap<String, MainCommand>();
+    static {
+        for (MainCommand e : values()) {
+            lookup.put(e.command, e);
+        }
+    }
+
+    static MainCommand lookupCommand(String cmd) {
+        return lookup.get(cmd);
+    }
+
+    MainCommand(String command) {
+        this.command = command;
+    }
+
+    MainCommand(String command, String offset, String... returnValues) {
+        this(command);
+        this.offset = Integer.parseInt(offset, 16);
+        this.returnValues = returnValues;
+    }
+
+    String decodeParameter(String parameter) {
+        if (parameter.length() == 1) {
+            int index = Integer.parseInt(parameter, 16) - offset;
+            return returnValues[index];
+        }
+
+        return parameter;
+    }
+
+    String encodeParameter(String parameter) {
+        for (int i = 0; i < returnValues.length; ++i) {
+            if (parameter == returnValues[i]) {
+                return String.valueOf(this.offset + i);
+            }
+        }
+
+        return null;
+    }
+
+    byte[] getBytes() {
+        return command.getBytes();
+    }
+}
+
+enum InformationCommand {
+    INPUT("IN", "6", "HDMI1", "HDMI2"),
+    SOURCE("IS", "0", "480i", "576i", "480p", "576p", "720p50", "720p60", "1080i50", "1080i60", "1080p24", "1080p50",
+            "1080p60", "No signal", "720p 3D", "1080i 3D", "1080p 3D", "4K"),
+    HORIZONTAL_RESOLUTION("RH"),
+    VERTICAL_RESOLUTION("RV"),
+    HORIZONTAL_FREQUENCY("FH"),
+    VERTICAL_FREQUENCY("FH"),
+    DEEP_COLOR("DC", "0", "8 bit", "10 bit", "12 bit"),
+    COLOR_SPACE("XV", "0", "RGB", "YUV", "x.v.Color"),
+    LAMP_TIME("LT"),
+    SOFTWARE_VERSION("SV");
+
+    static {
+        HORIZONTAL_RESOLUTION.isNumeric = true;
+        VERTICAL_RESOLUTION.isNumeric = true;
+        HORIZONTAL_FREQUENCY.isNumeric = true;
+        VERTICAL_FREQUENCY.isNumeric = true;
+        LAMP_TIME.isNumeric = true;
+    }
+
+    private final String command;
+    private int offset;
+    private boolean isNumeric = false;
+    private String[] returnValues;
+    private static Map<String, InformationCommand> lookup = new HashMap<String, InformationCommand>();
+    static {
+        for (InformationCommand e : values()) {
+            lookup.put(e.command, e);
+        }
+    }
+
+    static InformationCommand lookupCommand(String cmd) {
+        return lookup.get(cmd);
+    }
+
+    String decodeParameter(String parameter) {
+        if (isNumeric) {
+            try {
+                return String.valueOf(Integer.parseInt(parameter, 16));
+            } catch (NumberFormatException e) {
+                return e.toString();
+            }
+        }
+
+        if (parameter.length() == 1) {
+            int index = Integer.parseInt(parameter, 16) - offset;
+            return returnValues[index];
+        }
+
+        return parameter;
+    }
+
+    private InformationCommand(String command) {
+        this.command = command;
+    }
+
+    private InformationCommand(String command, String offset, String... returnValues) {
+        this(command);
+        this.offset = Integer.parseInt(offset, 16);
+        this.returnValues = returnValues;
+    }
+
+    byte[] getBytes() {
+        return command.getBytes();
+    }
+}
+
+enum RemoteCommand {
+    STANDBY(0x37, 0x33, 0x30, 0x36),
+    ON(0x37, 0x33, 0x30, 0x35),
+    INPUT(0x37, 0x33, 0x30, 0x38),
+    INFO(0x37, 0x33, 0x37, 0x34),
+    ENVIRONMENT_SETTING(0x37, 0x33, 0x35, 0x45),
+    SETTING_3D(0x37, 0x33, 0x44, 0x35),
+    CLEAR_MOTION_DRIVE(0x37, 0x33, 0x38, 0x41),
+    LENS_CONTROL(0x37, 0x33, 0x33, 0x30),
+    LENS_MEMORY(0x37, 0x33, 0x44, 0x34),
+    LENS_APERTURE(0x37, 0x33, 0x32, 0x30),
+    MPC(0x37, 0x33, 0x46, 0x30),
+    PICTURE_ANALYSER(0x37, 0x33, 0x35, 0x43),
+    BEFORE_AFTER(0x37, 0x33, 0x43, 0x35),
+    HIDE(0x37, 0x33, 0x31, 0x44),
+    UP(0x37, 0x33, 0x30, 0x31),
+    DOWN(0x37, 0x33, 0x30, 0x32),
+    RIGHT(0x37, 0x33, 0x33, 0x34),
+    LEFT(0x37, 0x33, 0x33, 0x36),
+    OK(0x37, 0x33, 0x32, 0x46),
+    MENU(0x37, 0x33, 0x32, 0x45),
+    BACK(0x37, 0x33, 0x30, 0x33),
+    FILM(0x37, 0x33, 0x36, 0x39),
+    CINEMA(0x37, 0x33, 0x36, 0x38),
+    ANIME(0x37, 0x33, 0x36, 0x36),
+    NATURAL(0x37, 0x33, 0x36, 0x41),
+    PHOTO(0x37, 0x33, 0x38, 0x42),
+    STAGE(0x37, 0x33, 0x36, 0x37),
+    THX(0x37, 0x33, 0x36, 0x46),
+    USER(0x37, 0x33, 0x44, 0x37),
+    FORMAT_3D(0x37, 0x33, 0x44, 0x36),
+    ADVANCED_MENU(0x37, 0x33, 0x37, 0x33),
+    GAMMA(0x37, 0x33, 0x37, 0x35),
+    COLOR_TEMPERATURE(0x37, 0x33, 0x37, 0x36),
+    COLOR_PROFILE(0x37, 0x33, 0x38, 0x38),
+    PICTURE_ADJUST(0x37, 0x33, 0x37, 0x32);
+
+    private final byte[] bytes;
+
+    RemoteCommand(int... bytes) {
+        this.bytes = new byte[bytes.length];
+        for (int i = 0; i < bytes.length; ++i) {
+            this.bytes[i] = (byte) bytes[i];
+        }
+    }
+
+    byte[] getBytes() {
+        return bytes;
+    }
+}
 
 /**
  * The {@link JvcProjectorCommand} class provides the codes for each command available for JVC Projectors. Command
@@ -36,111 +227,24 @@ public class JvcProjectorCommand {
 
     private LinkedBlockingQueue<RequestMessage> requestQueue;
 
-    private final int RESPONSE_QUEUE_TIMEOUT = 30000;
-
-    protected String thingID;
+    private final int RESPONSE_QUEUE_TIMEOUT = 5000;
 
     // Actual command strings sent to/received from the device (without CR)
-    protected byte[] deviceCommand;
-    protected String deviceReply;
+    private byte[] commandBytes = null;
+    private String decodedResponse = null;
 
     // Short human-readable name of the command
-    protected String commandName;
+    private MainCommand command;
+    private InformationCommand infoCommand;
 
-    protected String errorCode;
-    protected String errorMessage;
+    private String errorCode = null;
+    private String errorMessage = null;
 
-    private boolean isQuiet;
+    private boolean isQuiet = false;
     private boolean isQuery;
 
-    private static final byte[] COMMAND_PREAMBLE = { 0x21, (byte) 0x89, 1 };
-    private static final byte[] QUERY_PREAMBLE = { 0x3F, (byte) 0x89, 1 };
-
-    private static final byte[] CHECK_COMMAND = { 0, 0 };
-
-    private static final Map<String, byte[]> statusCommands = Stream
-            .of(new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_POWER_STATE, new byte[] { 0x50, 0x57 }),
-                    new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_INPUT_STATE, new byte[] { 0x49, 0x50 }))
-            .collect(Collectors.toMap(SimpleEntry::getKey, SimpleEntry::getValue));
-
-    private static final Map<String, byte[]> operatingCommands = Stream.of(
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_POWER_STATE + OnOffType.ON,
-                    new byte[] { 0x50, 0x57, 0x31 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_POWER_STATE + OnOffType.OFF,
-                    new byte[] { 0x50, 0x57, 0x30 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_INPUT_STATE + "1", new byte[] { 0x49, 0x50, 0x36 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_INPUT_STATE + "2", new byte[] { 0x49, 0x50, 0x37 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_STANDBY,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x30, 0x36 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_ON,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x30, 0x35 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_INPUT,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x30, 0x38 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_INFO,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x37, 0x34 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_ENVIRONMENT_SETTING,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x35, 0x45 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_3D_SETTING,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x44, 0x35 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_CLEAR_MOTION_DRIVE,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x38, 0x41 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_LENS_CONTROL,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x33, 0x30 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_LENS_MEMORY,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x44, 0x34 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_LENS_APERTURE,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x32, 0x30 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_MPC,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x46, 0x30 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_PICTURE_ANALYSER,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x35, 0x43 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_BEFORE_AFTER,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x43, 0x35 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_HIDE,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x31, 0x44 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_UP,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x30, 0x31 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_DOWN,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x30, 0x32 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_RIGHT,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x33, 0x34 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_LEFT,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x33, 0x36 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_OK,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x32, 0x46 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_MENU,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x32, 0x35 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_BACK,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x30, 0x33 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_FILM,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x36, 0x39 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_CINEMA,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x36, 0x38 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_ANIME,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x36, 0x36 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_NATURAL,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x36, 0x41 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_PHOTO,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x38, 0x42 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_STAGE,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x36, 0x37 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_THX,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x36, 0x46 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_USER,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x44, 0x37 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_3D_FORMAT,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x44, 0x36 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_ADVANCED_MENU,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x37, 0x33 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_GAMMA,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x37, 0x35 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_COLOR_TEMPERATURE,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x37, 0x36 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_COLOR_PROFILE,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x38, 0x38 }),
-            new SimpleEntry<>(JvcProjectorBindingConstants.CHANNEL_PICTURE_ADJUST,
-                    new byte[] { 0x52, 0x43, 0x37, 0x33, 0x37, 0x32 }))
-            .collect(Collectors.toMap(SimpleEntry::getKey, SimpleEntry::getValue));
+    private static final byte[] COMMAND_PREAMBLE = { '!', (byte) 0x89, 1 };
+    private static final byte[] QUERY_PREAMBLE = { '?', (byte) 0x89, 1 };
 
     /*
      * The {@link JvcProjectorCommand} class issues the command codes necessary for JVC projectors. The byte codes are
@@ -148,45 +252,39 @@ public class JvcProjectorCommand {
      *
      * @author Nick Hill - Initial contribution
      */
-    public JvcProjectorCommand(String t, LinkedBlockingQueue<RequestMessage> q, String n) {
-        thingID = t;
-        requestQueue = q;
-        commandName = n;
-        setQuiet(false);
+    private JvcProjectorCommand(LinkedBlockingQueue<RequestMessage> queue, MainCommand command, byte[] data) {
+        requestQueue = queue;
+        this.command = command;
+        commandBytes = ArrayUtils.addAll(command.getBytes(), data);
+    }
+
+    public JvcProjectorCommand(LinkedBlockingQueue<RequestMessage> queue, MainCommand command) {
+        this(queue, command, new byte[] {});
+        isQuery = command.isQueryable();
+    }
+
+    public JvcProjectorCommand(LinkedBlockingQueue<RequestMessage> queue, MainCommand command, String arg) {
+        this(queue, command, command.encodeParameter(arg).getBytes());
         isQuery = false;
+    }
 
-        if (commandName.isEmpty()) {
-            deviceCommand = CHECK_COMMAND;
-        } else {
-            if (operatingCommands.containsKey(commandName)) {
-                deviceCommand = operatingCommands.get(commandName);
-            } else if (statusCommands.containsKey(commandName)) {
-                deviceCommand = statusCommands.get(commandName);
-                isQuery = true;
-            } else {
-                logger.error("Unknown command {} being sent for thing {}", commandName, thingID);
-                deviceCommand = null;
-            }
-        }
+    public JvcProjectorCommand(LinkedBlockingQueue<RequestMessage> queue, InformationCommand infoCmd) {
+        this(queue, MainCommand.INFORMATION, infoCmd.getBytes());
+        infoCommand = infoCmd;
+        isQuery = true;
+    }
 
-        deviceReply = null;
-        errorCode = null;
-        errorMessage = null;
+    public JvcProjectorCommand(LinkedBlockingQueue<RequestMessage> queue, RemoteCommand remoteCmd) {
+        this(queue, MainCommand.REMOTE, remoteCmd.getBytes());
+        isQuery = false;
     }
 
     public String getCommandName() {
-        return commandName;
-    }
-
-    public void parseSuccessfulReply() {
+        return command.toString();
     }
 
     public boolean isSuccessful() {
         return errorCode == null ? true : false;
-    }
-
-    public String successAsString() {
-        return errorCode == null ? "succeeded" : "failed";
     }
 
     public String getErrorCode() {
@@ -219,19 +317,13 @@ public class JvcProjectorCommand {
             return;
         }
 
-        if (deviceCommand == null) {
-            createGenericError("Execute method was called with a null deviceCommand");
-            return;
-        }
-
-        if (thingID == null) {
-            createGenericError("Execute method was called with a null thing");
+        if (commandBytes == null) {
+            createGenericError("Execute method was called with a null commandBytes");
             return;
         }
 
         // Send command & get response
         if (sendCommand()) {
-            parseSuccessfulReply();
             if (!isQuiet()) {
                 logSuccess();
             }
@@ -244,12 +336,11 @@ public class JvcProjectorCommand {
     }
 
     public void logSuccess() {
-        logger.debug("Execute '{}' succeeded on thing {}", commandName, thingID);
+        logger.debug("Execute '{}' succeeded", getCommandName());
     }
 
     public void logFailure() {
-        logger.error("Execute '{}' failed on thing {}: errorCode={}, errorMessage={}", commandName, thingID, errorCode,
-                errorMessage);
+        logger.error("Execute '{}' failed: errorCode={}, errorMessage={}", getCommandName(), errorCode, errorMessage);
     }
 
     /*
@@ -274,7 +365,7 @@ public class JvcProjectorCommand {
         }
 
         // Create the request message
-        RequestMessage requestMsg = new RequestMessage(commandName, ArrayUtils.addAll(header, deviceCommand),
+        RequestMessage requestMsg = new RequestMessage(getCommandName(), ArrayUtils.addAll(header, commandBytes),
                 responseQueue, numResponses);
         byte[] response;
 
@@ -282,9 +373,10 @@ public class JvcProjectorCommand {
             // Put the request message on the request queue
             requestQueue.put(requestMsg);
             logger.trace("Put request on queue (depth={}), sent command '{}'", requestQueue.size(),
-                    getAsHexString(deviceCommand));
+                    getAsHexString(commandBytes));
 
             // Wait on the response queue for the response message
+            logger.trace("Waiting for ACK to command");
             response = responseQueue.poll(RESPONSE_QUEUE_TIMEOUT, TimeUnit.MILLISECONDS);
 
             if (response == null) {
@@ -293,14 +385,17 @@ public class JvcProjectorCommand {
                 return false;
             }
 
-            deviceReply = getAsHexString(response);
+            if (response.length == 0) {
+                createGenericError("No ACK received");
+                return false;
+            }
 
             if (!isAck(response)) {
-                logger.trace("Did not receive Ack message for request. Got {}", deviceReply);
+                logger.trace("Did not receive Ack message for request. Got {}", decodedResponse);
                 createGenericError("Did not receive ACK for request");
                 return false;
             }
-            logger.trace("Got ACK message off response queue, received reply '{}'", deviceReply);
+            logger.trace("Got ACK message off response queue, received reply '{}'", decodedResponse);
 
             // There will be another message issued if the request was a query request
             if (isQuery) {
@@ -314,8 +409,18 @@ public class JvcProjectorCommand {
                     return false;
                 }
 
-                deviceReply = getAsHexString(response);
-                logger.trace("Got response to query off response queue, received reply '{}'", deviceReply);
+                if (response.length == 0) {
+                    createGenericError("No ACK received");
+                    return false;
+                }
+
+                logger.trace("Got response to query off response queue, received reply '{}'", getAsHexString(response));
+                if (!isResponse(response)) {
+                    createGenericError("Did not receive response for request");
+                    return false;
+                }
+
+                decodedResponse = parseResponse(response);
             }
         } catch (InterruptedException e) {
             createGenericError("Poll of response queue was interrupted");
@@ -325,7 +430,19 @@ public class JvcProjectorCommand {
         return true;
     }
 
-    private static String getAsHexString(byte[] b) {
+    String parseResponse(byte[] response) {
+        String parameter = new String(response, 5, response.length - 5);
+        if (command == MainCommand.INFORMATION) {
+            return infoCommand.decodeParameter(parameter);
+        }
+        return command.decodeParameter(parameter);
+    }
+
+    String getResponse() {
+        return decodedResponse;
+    }
+
+    static String getAsHexString(byte[] b) {
         StringBuilder sb = new StringBuilder();
 
         for (int j = 0; j < b.length; j++) {
@@ -341,8 +458,13 @@ public class JvcProjectorCommand {
     }
 
     private boolean isAck(byte[] bytes) {
-        return (bytes[0] == 0x06 && bytes[1] == (byte) 0x89 && bytes[2] == 0x01 && bytes[3] == deviceCommand[0]
-                && bytes[4] == deviceCommand[1]);
+        return (bytes[0] == 0x06 && bytes[1] == (byte) 0x89 && bytes[2] == 0x01 && bytes[3] == commandBytes[0]
+                && bytes[4] == commandBytes[1]);
+    }
+
+    private boolean isResponse(byte[] bytes) {
+        return (bytes[0] == '@' && bytes[1] == (byte) 0x89 && bytes[2] == 0x01 && bytes[3] == commandBytes[0]
+                && bytes[4] == commandBytes[1]);
     }
 
 }

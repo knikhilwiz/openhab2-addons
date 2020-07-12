@@ -22,20 +22,20 @@ import java.util.concurrent.LinkedBlockingQueue;
  */
 public class RequestMessage {
     private LinkedBlockingQueue<byte[]> rcvQueue;
-    private byte[] deviceCommand;
+    private byte[] commandBytes;
     private String commandName;
     private int numResponses;
 
-    public RequestMessage(String commandName, byte[] deviceCommand, LinkedBlockingQueue<byte[]> rcvQueue,
+    public RequestMessage(String commandName, byte[] commandBytes, LinkedBlockingQueue<byte[]> rcvQueue,
             int numResponses) {
         this.commandName = commandName;
-        this.deviceCommand = deviceCommand;
+        this.commandBytes = commandBytes;
         this.rcvQueue = rcvQueue;
         this.numResponses = numResponses;
     }
 
-    public byte[] getDeviceCommand() {
-        return deviceCommand;
+    public byte[] getCommandBytes() {
+        return commandBytes;
     }
 
     public String getCommandName() {

@@ -10,7 +10,9 @@
 	    
 	    <channel-groups>
 	       <channel-group id="status" typeId="status"/>
-	       <channel-group id="remote" typeId="remote"/>
+           <channel-group id="info" typeId="info"/>
+           <channel-group id="source-info" typeId="source-info"/>
+           <channel-group id="remote" typeId="remote"/>
 	     </channel-groups>
 	    
 	    <config-description>
@@ -30,69 +32,114 @@
         <label>Status</label>
         <description>These channels accept commands and also trigger when the device changes state</description>
         <channels>
-            <channel id="power-state" typeId="channel-type-switch">
+            <channel id="power-switch" typeId="channel-type-switch">
                 <label>Power On/Off</label>
                 <description>This channel provides current state and also triggers when the state changes on refresh</description>
             </channel>
-            <channel id="input-state" typeId="channel-type-input">
-                <label>Current input (HDMI1/HDMI2)</label>
-                <description>This is only populated when the Power is on.</description>
+            <channel id="power-state" typeId="channel-type-string-readonly">
+                <label>Power On/Off</label>
+                <description>This channel provides current state and also triggers when the state changes on refresh</description>
+            </channel>
+            <channel id="input" typeId="channel-type-input">
+            </channel>
+            <channel id="model" typeId="channel-type-string-readonly">
+                <label>Model</label>
+            </channel>
+            <channel id="source" typeId="channel-type-string-readonly">
+                <label>Source</label>
             </channel>
         </channels>
+    </channel-group-type>
+    
+    <channel-group-type id="info">
+    <label>Information</label>
+    <description>These channels are read only channels that provide information about the projector.</description>
+    <channels>
+        <channel id="input" typeId="channel-type-information">
+            <label>Input</label></channel>
+        <channel id="source-format" typeId="channel-type-information">
+            <label>Source Format</label>
+        </channel>
+        <channel id="lamp-time" typeId="channel-type-information">
+            <label>Lamp Time</label>
+        </channel>
+        <channel id="software-version" typeId="channel-type-information">        
+            <label>Software Version</label>
+        </channel>
+    </channels>
+    </channel-group-type>    
+
+    <channel-group-type id="source-info">
+    <label>Source Information</label>
+    <description>These channels are read only channels that provide information about the content that is playing on the projector.</description>
+    <channels>
+        <channel id="horizontal-resolution" typeId="channel-type-information">
+            <label>Horizontal Resolution</label>
+        </channel>
+        <channel id="vertical-resolution" typeId="channel-type-information">
+            <label>Vertical Resolution</label>
+        </channel>
+        <channel id="horizontal-frequency" typeId="channel-type-information">
+            <label>Horizontal Frequency</label>
+        </channel>
+        <channel id="vertical-frequency" typeId="channel-type-information">
+            <label>Vertical Frequency</label>
+        </channel>
+        <channel id="deep-color" typeId="channel-type-information">
+            <label>Deep Color</label>
+        </channel>
+        <channel id="color-space" typeId="channel-type-information">
+            <label>Color Space</label>
+        </channel>
+    </channels>
     </channel-group-type>    
             
     <channel-group-type id="remote">
-        <label>Operations</label>
+        <label>Remote Buttons</label>
         <description>These channels accept commands and also trigger when the device changes state. They corresponding to pressing the same button on the remote.</description>
         <channels>
-            <channel id="standby" typeId="channel-type-remote-button"/>
-            <channel id="on" typeId="channel-type-remote-button"/>
-            <channel id="info" typeId="channel-type-remote-button"/>
-            <channel id="environment-setting" typeId="channel-type-remote-button"/>
-            <channel id="3d-setting" typeId="channel-type-remote-button"/>
-            <channel id="clear-motion-drive" typeId="channel-type-remote-button"/>
-            <channel id="lens-control" typeId="channel-type-remote-button"/>
-            <channel id="lens-memory" typeId="channel-type-remote-button"/>
-            <channel id="lens-aperture" typeId="channel-type-remote-button"/>
-            <channel id="mpc" typeId="channel-type-remote-button"/>
-            <channel id="picture-analyser" typeId="channel-type-remote-button"/>
-            <channel id="before-after" typeId="channel-type-remote-button"/>
-            <channel id="hide" typeId="channel-type-remote-button"/>
-            <channel id="up" typeId="channel-type-remote-button"/>
-            <channel id="down" typeId="channel-type-remote-button"/>
-            <channel id="right" typeId="channel-type-remote-button"/>
-            <channel id="left" typeId="channel-type-remote-button"/>
-            <channel id="ok" typeId="channel-type-remote-button"/>
-            <channel id="menu" typeId="channel-type-remote-button"/>
-            <channel id="back" typeId="channel-type-remote-button"/>
-            <channel id="film" typeId="channel-type-remote-button"/>
-            <channel id="cinema" typeId="channel-type-remote-button"/>
-            <channel id="anime" typeId="channel-type-remote-button"/>
-            <channel id="natural" typeId="channel-type-remote-button"/>
-            <channel id="photo" typeId="channel-type-remote-button"/>
-            <channel id="stage" typeId="channel-type-remote-button"/>
-            <channel id="thx" typeId="channel-type-remote-button"/>
-            <channel id="user" typeId="channel-type-remote-button"/>
-            <channel id="3d-format" typeId="channel-type-remote-button"/>
-            <channel id="advanced-menu" typeId="channel-type-remote-button"/>
-            <channel id="gamma" typeId="channel-type-remote-button"/>
-            <channel id="color-temperature" typeId="channel-type-remote-button"/>
-            <channel id="color-profile" typeId="channel-type-remote-button"/>
-            <channel id="picture-adjust" typeId="channel-type-remote-button"/>
+          <channel id="button" typeId="channel-type-remote-button">
+          <label>Remote button</label>
+          <description>Each of these commands represents pressing the equivalent button on the remote.</description>
+          </channel>
         </channels>
     </channel-group-type>
         
     <channel-type id="channel-type-switch" advanced="false">
         <item-type>Switch</item-type>
         <label>Power</label>
-        <description>Channel triggered when data is received on from the Projector</description>
         <autoUpdatePolicy>veto</autoUpdatePolicy>
     </channel-type>
 
     <channel-type id="channel-type-input" advanced="false">
-        <item-type>Number</item-type>
+        <item-type>String</item-type>
         <label>Input</label>
-        <description>Channel triggered when data is received on from the Projector</description>
+        <state>
+            <options>
+                <option value="HDMI1">HDMI1</option>
+                <option value="HDMI2">HDMI2</option>
+            </options>        
+        </state>
+        <autoUpdatePolicy>veto</autoUpdatePolicy>
+    </channel-type>
+
+    <channel-type id="channel-type-string" advanced="false">
+        <item-type>String</item-type>
+        <label>String</label>
+        <autoUpdatePolicy>veto</autoUpdatePolicy>
+    </channel-type>
+
+    <channel-type id="channel-type-string-readonly" advanced="false">
+        <item-type>String</item-type>
+        <label>Readonly String</label>
+        <state readOnly="true"/>
+        <autoUpdatePolicy>veto</autoUpdatePolicy>
+    </channel-type>
+
+    <channel-type id="channel-type-information" advanced="false">
+        <item-type>String</item-type>
+        <label>Readonly String</label>
+        <state readOnly="true"/>
         <autoUpdatePolicy>veto</autoUpdatePolicy>
     </channel-type>
 
@@ -100,7 +147,45 @@
 		<item-type>String</item-type>
 		<label>Remote Button</label>
         <description>A string command sent to this channel is equivalent to pressing the equivalent remote control button</description>
-        <autoUpdatePolicy>veto</autoUpdatePolicy>
+          <command>
+          <options>
+            <option value="standby">STAND BY</option>
+            <option value="on">ON</option>
+            <option value="input">INPUT</option>
+            <option value="info">INFO</option>
+            <option value="environment-setting">ENV. SETTING</option>
+            <option value="3d-setting">3D SETTING</option>
+            <option value="clear-motion-drive">C.M.D</option>
+            <option value="lens-control">LENS CONTROL</option>
+            <option value="lens-memory">LENS MEMORY</option>
+            <option value="lens-aperture">LENS AP.</option>
+            <option value="mpc">MPC</option>
+            <option value="picture-analyser">P.ANALYZER</option>
+            <option value="before-after">BEFORE/AFTER</option>
+            <option value="hide">HIDE</option>
+            <option value="up">▲</option>
+            <option value="down">▼</option>
+            <option value="right">▶</option>
+            <option value="left">◀</option>
+            <option value="ok">OK</option>
+            <option value="menu">MENU</option>
+            <option value="back">BACK</option>
+            <option value="film">FILM</option>
+            <option value="cinema">CINEMA</option>
+            <option value="anime">ANIME.</option>
+            <option value="natural">NATURAL</option>
+            <option value="photo">PHOTO</option>
+            <option value="stage">STAGE</option>
+            <option value="thx">THX</option>
+            <option value="user">USER</option>
+            <option value="3d-format">3D FORMAT</option>
+            <option value="advanced-menu">ADVANCED MENU</option>
+            <option value="gamma">GAMMA</option>
+            <option value="color-temperature">COLOR TEMP.</option>
+            <option value="color-profile">COLOR P.FILE</option>
+            <option value="picture-adjust">PIC. ADJ.</option>
+          </options>
+          </command>
 	</channel-type>
 
 </thing:thing-descriptions>
