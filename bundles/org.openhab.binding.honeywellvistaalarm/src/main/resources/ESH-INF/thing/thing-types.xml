@@ -6,7 +6,8 @@
 
     <bridge-type id="panel">
         <label>Honeywell Vista Panel</label>
-                <channels>
+        <description>Represents a Honeywell Vista panel with a RS232 port or a 4100SM serial interface module.</description>
+        <channels>
             <channel id="bridge_reset" typeId="reset">
                 <label>Reset connection</label>
                 <description>Resets the RS232 connection</description>
@@ -21,9 +22,9 @@
             <parameter name="serialPort" type="text" required="true">
                 <context>serial-port</context>
                 <label>Serial Port</label>
-                <description>The serial port name for the DSC IT-100. Valid values
+                <description>The serial port name for the Honeywell Vista RS232 port. Valid values
                     are e.g. COM1 for Windows and /dev/ttyS0 or
-                    /dev/ttyUSB0 for Linux.</description>
+                    /dev/ttyUSB0 for Linux. This also accepts a rfc2217:// address to a remote serial port.</description>
             </parameter>
 
             <parameter name="baud" type="integer" required="false">
@@ -163,6 +164,10 @@
             <parameter name="zoneNumber" type="integer" required="true" min="1" max="250">
                 <label>Zone Number</label>
                 <description>The Zone Number (1-250).</description>
+            </parameter>
+            <parameter name="zoneDescription" type="text">
+                <label>Zone Description</label>
+                <description>The Zone Description as set in the panel.</description>
             </parameter>
         </config-description>
     </thing-type>

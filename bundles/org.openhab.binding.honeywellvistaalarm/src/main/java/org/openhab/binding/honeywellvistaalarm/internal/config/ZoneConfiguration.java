@@ -23,6 +23,8 @@ public class ZoneConfiguration {
     // Partition Thing constants
     public static final String ZONE_NUMBER = "zoneNumber";
 
+    public static final String ZONE_DESCRIPTION = "zoneDescription";
+
     /**
      * The Zone Number. This is a required parameter for a zone.
      */

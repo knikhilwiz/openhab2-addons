@@ -24,7 +24,6 @@ import org.eclipse.smarthome.core.thing.ThingUID;
 import org.openhab.binding.honeywellvistaalarm.internal.config.KeypadConfiguration;
 import org.openhab.binding.honeywellvistaalarm.internal.config.ZoneConfiguration;
 import org.openhab.binding.honeywellvistaalarm.internal.handler.PanelBridgeHandler;
-import org.osgi.service.component.annotations.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,7 +33,8 @@ import org.slf4j.LoggerFactory;
  * @author Russell Stephens - Initial Contribution
  *
  */
-@Component(service = HoneywellVistaAlarmDiscoveryService.class, immediate = true, configurationPid = "discovery.honeywellvistaalarm")
+// @Component(service = HoneywellVistaAlarmDiscoveryService.class, immediate = true, configurationPid =
+// "discovery.honeywellvistaalarm")
 public class HoneywellVistaAlarmDiscoveryService extends AbstractDiscoveryService {
 
     private final Logger logger = LoggerFactory.getLogger(HoneywellVistaAlarmDiscoveryService.class);
@@ -76,7 +76,7 @@ public class HoneywellVistaAlarmDiscoveryService extends AbstractDiscoveryServic
 
         ThingUID thingUID = new ThingUID(HoneywellVistaAlarmBindingConstants.THING_TYPE_ZONE, bridge.getUID(), thingID);
         properties.put(ZoneConfiguration.ZONE_NUMBER, zone);
-        // properties.put(ZoneConfiguration.ZONE_LABEL, label);
+        properties.put(ZoneConfiguration.ZONE_DESCRIPTION, label);
 
         DiscoveryResult discoveryResult;
 
@@ -105,6 +105,6 @@ public class HoneywellVistaAlarmDiscoveryService extends AbstractDiscoveryServic
 
     @Override
     protected void startScan() {
-        // Can be ignored here as discovery is via the bridge
+        panelBridgeHandler.startScan();
     }
 }

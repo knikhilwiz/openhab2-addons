@@ -142,7 +142,6 @@ public class PanelBridgeHandler extends BaseBridgeHandler implements RS232Interf
         writeQueue = new ConcurrentLinkedQueue<HoneywellVistaAlarmMessage>();
         readyForNextCommand = true;
         commandSendTime = -1;
-        sendCommand(ZONE_DESCRIPTOR_REQUEST);
         sendCommand(ARMING_STATUS_REQUEST);
     }
 
@@ -206,7 +205,7 @@ public class PanelBridgeHandler extends BaseBridgeHandler implements RS232Interf
 
             discoveryService.addKeypadThing(getThing(), partition);
 
-            Integer zone = (block - 1) * 64 + i;
+            Integer zone = block * 64 + i;
             ZoneThingHandler handler = this.zoneHandlers.get(zone);
 
             if (handler == null) {
@@ -539,6 +538,12 @@ public class PanelBridgeHandler extends BaseBridgeHandler implements RS232Interf
     public void unregisterDiscoveryService() {
         this.discoveryService = null;
         logger.trace("unregisterDiscoveryService(): Discovery Service Unregistered!");
+    }
+
+    public void startScan() {
+        if (serialInterface.isConnected()) {
+            sendCommand(ZONE_DESCRIPTOR_REQUEST);
+        }
     }
 
     @Override
